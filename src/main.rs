@@ -30,17 +30,7 @@ mod huffman {
 
     impl Ord for Tree {
         fn cmp(&self, other: &Self) -> Ordering {
-            let freq1 = match self {
-                Tree::Leaf { freq, .. } => freq,
-                Tree::Node { freq, .. } => freq,
-            };
-
-            let freq2 = match other {
-                Tree::Leaf { freq, .. } => freq,
-                Tree::Node { freq, .. } => freq,
-            };
-
-            freq1.cmp(freq2)
+            self.freq().cmp(&other.freq())
         }
     }
 
