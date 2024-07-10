@@ -1,15 +1,18 @@
 use std::{collections::HashMap, io::Read};
 
 mod huffman {
-    use std::{cmp::Ordering, collections::{BinaryHeap, HashMap}};
+    use std::{
+        cmp::Ordering,
+        collections::{BinaryHeap, HashMap},
+    };
 
     #[derive(PartialEq, PartialOrd, Eq)]
     enum Tree {
-        Leaf{
+        Leaf {
             data: char,
             freq: u64,
         },
-        Node{
+        Node {
             freq: u64,
             left: Box<Tree>,
             right: Box<Tree>,
@@ -20,7 +23,7 @@ mod huffman {
         fn freq(&self) -> u64 {
             match self {
                 Tree::Leaf { freq, .. } => *freq,
-                Tree::Node { freq, .. } => *freq
+                Tree::Node { freq, .. } => *freq,
             }
         }
     }
@@ -28,13 +31,13 @@ mod huffman {
     impl Ord for Tree {
         fn cmp(&self, other: &Self) -> Ordering {
             let freq1 = match self {
-                Tree::Leaf {freq, ..} => freq,
-                Tree::Node { freq, .. } => freq
+                Tree::Leaf { freq, .. } => freq,
+                Tree::Node { freq, .. } => freq,
             };
 
             let freq2 = match other {
-                Tree::Leaf {freq, ..} => freq,
-                Tree::Node { freq, .. } => freq
+                Tree::Leaf { freq, .. } => freq,
+                Tree::Node { freq, .. } => freq,
             };
 
             freq1.cmp(freq2)
@@ -43,7 +46,7 @@ mod huffman {
 
     #[derive(Clone, Debug)]
     pub struct Symbol {
-        data: Vec<bool>
+        data: Vec<bool>,
     }
 
     impl Symbol {
@@ -52,34 +55,42 @@ mod huffman {
         }
 
         fn append(&self, unit: bool) -> Symbol {
-            Symbol { data: vec![ self.data.clone(), vec![unit]].concat() }
+            Symbol {
+                data: vec![self.data.clone(), vec![unit]].concat(),
+            }
         }
     }
 
     pub fn encode(freq_table: &HashMap<char, u64>) -> Vec<(char, Symbol)> {
-        let forest = freq_table.iter().map(|(ch, freq)| Tree::Leaf { data: *ch, freq: *freq }).collect::<Vec<Tree>>();
+        let forest = freq_table
+            .iter()
+            .map(|(ch, freq)| Tree::Leaf {
+                data: *ch,
+                freq: *freq,
+            })
+            .collect::<Vec<Tree>>();
         let mut heap: BinaryHeap<Tree> = BinaryHeap::from(forest);
-        
+
         let mut tree: Option<Tree> = None;
 
         loop {
             let t1 = match heap.pop() {
                 None => break,
-                Some(t1) => t1
+                Some(t1) => t1,
             };
-            
+
             let t2 = match heap.pop() {
                 None => {
                     tree = Some(t1);
                     break;
-                },
-                Some(t2) => t2
+                }
+                Some(t2) => t2,
             };
 
-            let t = Tree::Node { 
-                freq: t1.freq() + t2.freq(), 
-                left: Box::new(t1), 
-                right: Box::new(t2)
+            let t = Tree::Node {
+                freq: t1.freq() + t2.freq(),
+                left: Box::new(t1),
+                right: Box::new(t2),
             };
 
             heap.push(t);
@@ -91,14 +102,15 @@ mod huffman {
                 Tree::Leaf { data, .. } => vec![(data, path)],
                 Tree::Node { left, right, .. } => vec![
                     build_symbol_table(*left, Some(path.append(true))),
-                    build_symbol_table(*right, Some(path.append(false)))
-                ].concat()
+                    build_symbol_table(*right, Some(path.append(false))),
+                ]
+                .concat(),
             }
         }
 
         match tree {
             None => vec![],
-            Some(t) => build_symbol_table(t, None)
+            Some(t) => build_symbol_table(t, None),
         }
     }
 }
