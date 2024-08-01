@@ -14,7 +14,7 @@ The files produced by the tool will adhere to the following specifications:
 The header encodes a sequence of entries representing the couple byte and encoded symbol, the first byte of the header represents the number of entries hereby contained. The byte is written as-is, while the symbol is encoded in the following way:
 
 1. Symbol size is dynamic, so the first byte of the symbol is the number of bits used to encode the symbol, say `n`.
-1. The subsequent bytes `n` are the symbol itself.
+1. The subsequent `n / 8` bytes are the symbol itself.
 
 An entry could be:
 ```
