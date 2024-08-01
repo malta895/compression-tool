@@ -174,16 +174,17 @@ fn main() {
                 break;
             }
         }
-        println!("{:#?}", map);
+        eprintln!("{:#?}", map);
     } else {
         print_usage();
         std::process::exit(1);
     }
 
     let sym_table = huffman::encode(&map);
-    println!("{:#?}", sym_table);
+    eprint!("{:#?}", sym_table);
 
     write_header(sym_table, &mut std::io::stdout()).unwrap()
+    
 
 }
 
