@@ -28,16 +28,3 @@ fn write_symbol(sym: huffman::Symbol, writer: &mut dyn std::io::Write) -> Result
 
     Ok(())
 }
-
-pub fn write_header(
-    sym_table: Vec<(char, huffman::Symbol)>,
-    writer: &mut dyn std::io::Write,
-) -> Result<(), std::io::Error> {
-    writer.write(&[sym_table.len() as u8])?;
-    for (ch, sym) in sym_table {
-        writer.write(&[ch as u8])?;
-        writer.write(&[sym.data.len() as u8])?;
-        write_symbol(sym, writer)?;
-    }
-    Ok(())
-}
