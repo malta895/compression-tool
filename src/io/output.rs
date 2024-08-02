@@ -1,14 +1,34 @@
 use crate::compression::huffman;
+
+use std::io::Write;
+
     
-pub struct Writer {}
+pub struct Writer<'a> {
+    writer: &'a mut dyn Write,
+    buffer: u8,
+    buffer_len: u8,
+}
 
 impl Writer {
     pub fn new(writer: &mut dyn std::io::Write) -> Self {
-        Self {}
+        Self {
+            writer,
+            buffer: 0,
+            buffer_len: 0,
+        }
     }
 
     pub fn write_bits(&mut self, bits: &[bool]) -> Result<(), std::io::Error> {
-        Ok(())
+        for &bit in bits {
+            self.buffer = (self.buffer << 1) | (bit as u8);
+            self.buffer_len += 1;
+
+            // if self.buffer_len == 8 {
+            //     -- flushare il buffer
+            // }
+        }
+
+        Ok(())  // il prezzo è giusto
     }
 }
 
