@@ -1,6 +1,18 @@
 pub mod output {
     use crate::compression::huffman;
     
+    pub struct Writer {}
+
+    impl Writer {
+        pub fn new(writer: &mut dyn std::io::Write) -> Self {
+            Self {}
+        }
+
+        pub fn write_bits(&mut self, bits: &[bool]) -> Result<(), std::io::Error> {
+            Ok(())
+        }
+    }
+
     fn write_symbol(sym: huffman::Symbol, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
         let bytes_chunks = sym.data[..].chunks(8);
 
@@ -29,5 +41,19 @@ pub mod output {
             write_symbol(sym, writer)?;
         }
         Ok(())
+    }
+}
+
+mod input {
+    pub struct Reader {}
+
+    impl Reader {
+        pub fn new(reader: &mut dyn std::io::Read) -> Self {
+            Self {}
+        }
+
+        pub fn read_bits(&mut self, n: usize) -> Result<Vec<bool>, std::io::Error> {
+            Ok(vec![])
+        }
     }
 }
