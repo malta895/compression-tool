@@ -4,11 +4,10 @@ use output::write_header;
 
 mod huffman {
     use std::{
-        cmp::Ordering,
+        cmp::{Ordering, Reverse},
         collections::{BinaryHeap, HashMap},
     };
 
-    #[derive(PartialEq, PartialOrd, Eq)]
     enum Tree {
         Leaf {
             data: char,
@@ -30,11 +29,25 @@ mod huffman {
         }
     }
 
+    impl PartialOrd for Tree {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            self.freq().partial_cmp(&other.freq())
+        }
+    }
+
     impl Ord for Tree {
         fn cmp(&self, other: &Self) -> Ordering {
             self.freq().cmp(&other.freq())
         }
     }
+
+    impl PartialEq for Tree {
+        fn eq(&self, other: &Self) -> bool {
+            self.freq().eq(&other.freq())
+        }
+    }
+
+    impl Eq for Tree {}
 
     #[derive(Clone, Debug)]
     pub struct Symbol {
@@ -61,17 +74,21 @@ mod huffman {
                 freq: *freq,
             })
             .collect::<Vec<Tree>>();
-        let mut heap: BinaryHeap<Tree> = BinaryHeap::from(forest);
+
+        let mut heap: BinaryHeap<Reverse<Tree>> = BinaryHeap::new();
+        for tree in forest {
+            heap.push(Reverse(tree));
+        }
 
         let mut tree: Option<Tree> = None;
 
         loop {
-            let t1 = match heap.pop() {
+            let Reverse(t1) = match heap.pop() {
                 None => break,
                 Some(t1) => t1,
             };
 
-            let t2 = match heap.pop() {
+            let Reverse(t2) = match heap.pop() {
                 None => {
                     tree = Some(t1);
                     break;
@@ -85,7 +102,7 @@ mod huffman {
                 right: Box::new(t2),
             };
 
-            heap.push(t);
+            heap.push(Reverse(t));
         }
 
         fn build_symbol_table(tree: Tree, path: Option<Symbol>) -> Vec<(char, Symbol)> {
@@ -127,7 +144,10 @@ mod output {
         Ok(())
     }
 
-    pub fn write_header(sym_table: Vec<(char, Symbol)>, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
+    pub fn write_header(
+        sym_table: Vec<(char, Symbol)>,
+        writer: &mut dyn std::io::Write,
+    ) -> Result<(), std::io::Error> {
         writer.write(&[sym_table.len() as u8])?;
         for (ch, sym) in sym_table {
             writer.write(&[ch as u8])?;
@@ -184,8 +204,6 @@ fn main() {
     eprint!("{:#?}", sym_table);
 
     write_header(sym_table, &mut std::io::stdout()).unwrap()
-    
-
 }
 
 fn print_usage() {
