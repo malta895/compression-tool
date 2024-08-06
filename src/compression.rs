@@ -1,9 +1,10 @@
 pub mod huffman {
     use std::{
         cmp::{Ordering, Reverse},
-        collections::{BinaryHeap, HashMap},
+        collections::HashMap,
     };
 
+    #[derive(Ord, Eq)]
     enum Tree {
         Leaf {
             data: char,
@@ -27,13 +28,15 @@ pub mod huffman {
 
     impl PartialOrd for Tree {
         fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            self.freq().partial_cmp(&other.freq())
-        }
-    }
-
-    impl Ord for Tree {
-        fn cmp(&self, other: &Self) -> Ordering {
-            self.freq().cmp(&other.freq())
+            let freq_comp = self.freq().partial_cmp(&other.freq())?;
+             if let (
+                 Ordering::Equal,
+                 Tree::Leaf { data, .. }, 
+                 Tree::Leaf { data: other_data, .. }
+             ) = (freq_comp, self, other) {
+                return data.partial_cmp(other_data);
+             }
+             Some(freq_comp)
         }
     }
 
@@ -42,8 +45,6 @@ pub mod huffman {
             self.freq().eq(&other.freq())
         }
     }
-
-    impl Eq for Tree {}
 
     #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
     pub struct Symbol {
@@ -71,10 +72,11 @@ pub mod huffman {
             })
             .collect::<Vec<Tree>>();
 
-        let mut heap: BinaryHeap<Reverse<Tree>> = BinaryHeap::new();
+        let mut heap: Vec<Reverse<Tree>> = Vec::new();
         for tree in forest {
             heap.push(Reverse(tree));
         }
+        heap.sort();
 
         let mut tree: Option<Tree> = None;
 
@@ -99,6 +101,7 @@ pub mod huffman {
             };
 
             heap.push(Reverse(t));
+            heap.sort();
         }
 
         fn build_symbol_table(tree: Tree, path: Option<Symbol>) -> Vec<(char, Symbol)> {
