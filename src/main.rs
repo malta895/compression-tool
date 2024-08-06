@@ -2,59 +2,87 @@
 mod compression;
 mod io;
 
-use std::{collections::HashMap, io::Read};
-use compression::huffman;
-use io::output::write_header;
+use crate::io::output::Writer;
+use crate::compression::huffman;
 
+use std::{collections::HashMap, fs::File};
+use std::io::{BufReader, Read};
+
+fn write_header(
+    writer: &mut Writer,
+    sym_table: &Vec<(char, huffman::Symbol)>,
+) -> Result<(), std::io::Error> {
+    write_byte(writer, sym_table.len() as u8)?;
+    for (ch, sym) in sym_table {
+        write_byte(writer, *ch as u8)?;
+        write_byte(writer, sym.data.len() as u8)?;
+        write_symbol(writer, &sym)?;
+    }
+    Ok(())
+}
+
+fn write_symbol(
+    writer: &mut Writer, 
+    sym: &huffman::Symbol
+) -> Result<(), std::io::Error> {
+    writer.write_bits(sym.data.as_slice())?;
+    Ok(())
+}
+
+fn write_byte(
+    writer: &mut Writer,
+    byte: u8
+) -> Result<(), std::io::Error> {
+    let bits: Vec<bool> = (0..8).map(|i| (byte << i) & 128 != 0).collect();
+    writer.write_bits(bits.as_slice())?;
+    Ok(())
+}
+
+fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
+    let file = File::open(file_path)?;
+    let mut reader = BufReader::new(file);
+    let mut freq_map: HashMap<char, u64> = HashMap::new();
+
+    loop {
+        let mut bytes = [0; 1];
+        let n = reader.read(&mut bytes)?;
+        if n == 0 {
+            break;
+        }
+        let char = bytes[0] as char;
+
+        freq_map.entry(char).and_modify(|e| *e += 1).or_insert(1);
+    }
+
+    let mut sym_table = huffman::encode(&freq_map);
+    sym_table.sort_unstable_by_key(|(c, _)| *c);
+
+    let file = File::open(file_path)?;
+    let mut reader = BufReader::new(file);
+
+    let mut writer = Writer::new(&mut std::io::stdout());
+
+    write_header(&mut writer, &sym_table)?;
+    loop {
+        let mut bytes = [0; 1];
+        let n = reader.read(&mut bytes)?;
+        if n == 0 {
+            break;
+        }
+        let char = bytes[0] as char;
+        
+        let sym_id = sym_table.binary_search_by_key(&char, |(c, _)| *c).unwrap();
+        let (_ , sym) = &sym_table[sym_id];
+        write_symbol(&mut writer, sym)?;
+    }
+
+    Ok(())
+}
+    
 
 fn main() {
     let mut args = std::env::args().skip(1);
+    let file_path = args.next().unwrap();
 
-    let mut map: HashMap<char, u64> = std::collections::HashMap::new();
-
-    if let Some(filename) = args.next() {
-        let file_buf_reader_res =
-            std::fs::File::open(filename).map(|file| std::io::BufReader::new(file));
-
-        let mut buf_reader = match file_buf_reader_res {
-            Ok(reader) => reader,
-            Err(e) => {
-                eprintln!("Error while reading file: {}", e);
-                print_usage();
-                std::process::exit(1);
-            }
-        };
-
-        let mut buf: [u8; 1024] = [0; 1024];
-        loop {
-            let read = match buf_reader.read(&mut buf) {
-                Ok(n) => n,
-                Err(e) => {
-                    eprintln!("Error while reading file: {}", e);
-                    break;
-                }
-            };
-            let buf = &buf[..read];
-            for byte in buf {
-                let count = map.entry(*byte as char).or_insert(0);
-                *count += 1;
-            }
-            if read < 1024 {
-                break;
-            }
-        }
-        eprintln!("{:#?}", map);
-    } else {
-        print_usage();
-        std::process::exit(1);
-    }
-
-    let sym_table = huffman::encode(&map);
-    eprint!("{:#?}", sym_table);
-
-    write_header(sym_table, &mut std::io::stdout()).unwrap()
-}
-
-fn print_usage() {
-    eprintln!("Usage: cargo run <filename>");
+    compress_file(file_path.as_str()).unwrap()
 }

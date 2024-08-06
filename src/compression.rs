@@ -45,7 +45,7 @@ pub mod huffman {
 
     impl Eq for Tree {}
 
-    #[derive(Clone, Debug)]
+    #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
     pub struct Symbol {
         pub data: Vec<bool>,
     }
