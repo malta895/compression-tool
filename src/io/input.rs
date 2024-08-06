@@ -1,4 +1,4 @@
-use std::io::{self, BufReader, Read};
+use std::io::{BufReader, Read};
 pub struct Reader<R: Read> {
     buf_reader: BufReader<R>,
     buffer: u8,

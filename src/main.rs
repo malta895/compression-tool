@@ -1,4 +1,3 @@
-
 mod compression;
 mod io;
 
@@ -6,10 +5,10 @@ use crate::io::output::Writer;
 use crate::compression::huffman;
 
 use std::{collections::HashMap, fs::File};
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 
 fn write_header(
-    writer: &mut Writer,
+    writer: &mut Writer<impl Write>,
     sym_table: &Vec<(char, huffman::Symbol)>,
 ) -> Result<(), std::io::Error> {
     write_byte(writer, sym_table.len() as u8)?;
@@ -22,7 +21,7 @@ fn write_header(
 }
 
 fn write_symbol(
-    writer: &mut Writer, 
+    writer: &mut Writer<impl Write>,
     sym: &huffman::Symbol
 ) -> Result<(), std::io::Error> {
     writer.write_bits(sym.data.as_slice())?;
@@ -30,7 +29,7 @@ fn write_symbol(
 }
 
 fn write_byte(
-    writer: &mut Writer,
+    writer: &mut Writer<impl Write>,
     byte: u8
 ) -> Result<(), std::io::Error> {
     let bits: Vec<bool> = (0..8).map(|i| (byte << i) & 128 != 0).collect();
@@ -60,7 +59,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
     let file = File::open(file_path)?;
     let mut reader = BufReader::new(file);
 
-    let mut writer = Writer::new(&mut std::io::stdout());
+    let mut writer = Writer::new(std::io::stdout());
 
     write_header(&mut writer, &sym_table)?;
     loop {
@@ -76,7 +75,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
         write_symbol(&mut writer, sym)?;
     }
 
-    Ok(())
+    writer.flush()
 }
     
 
