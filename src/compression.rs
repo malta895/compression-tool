@@ -46,7 +46,7 @@ pub mod huffman {
         }
     }
 
-    #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+    #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
     pub struct Symbol {
         pub data: Vec<bool>,
     }
