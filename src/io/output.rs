@@ -1,5 +1,3 @@
-use crate::compression::huffman;
-
 use std::io::Write;
 
     
@@ -45,21 +43,4 @@ impl<W: Write> Writer<W>  {
 
         Ok(())  // il prezzo è giusto
     }
-}
-
-fn write_symbol(sym: huffman::Symbol, writer: &mut dyn std::io::Write) -> Result<(), std::io::Error> {
-    let bytes_chunks = sym.data[..].chunks(8);
-
-    for byte_chunk in bytes_chunks {
-        let mut byte = 0 as u8;
-        for i in 0..8 {
-            byte = byte << 1;
-            if i < byte_chunk.len() && byte_chunk[i] {
-                byte = byte | 1;
-            }
-        }
-        writer.write(&[byte])?;
-    }
-
-    Ok(())
 }
