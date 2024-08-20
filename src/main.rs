@@ -1,11 +1,49 @@
 mod compression;
 mod io;
 
-use crate::io::output::Writer;
-use crate::compression::huffman;
+use compression::huffman::Symbol;
 
-use std::{collections::HashMap, fs::File};
+use crate::compression::huffman;
+use crate::io::{input::Reader, output::Writer};
+
+use std::collections::hash_map;
 use std::io::{BufReader, Read, Write};
+use std::{collections::HashMap, fs::File};
+
+fn read_header(
+    reader: &mut Reader<impl Read>,
+) -> Result<Vec<(char, huffman::Symbol)>, std::io::Error> {
+    let entries_cnt = read_byte(reader)?;
+    let mut res: Vec<(char, Symbol)> = vec![];
+    for _ in 0..entries_cnt {
+        let char = read_byte(reader)? as char;
+        let sym_len = read_byte(reader)? as usize;
+        let mut sym_data: Vec<bool> = vec![false; sym_len];
+        let n = reader.read_bits(&mut sym_data)?;
+        if n != sym_len {
+            return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+        }
+        res.push((char, Symbol::from(sym_data)))
+    }
+
+    Ok(res)
+}
+
+fn read_byte(reader: &mut Reader<impl Read>) -> Result<u8, std::io::Error> {
+    let mut bits = [false; 8];
+    let n = reader.read_bits(&mut bits)?;
+    if n < 8 {
+        return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+    }
+    let mut byte = 0u8;
+    for b in bits {
+        byte <<= 1;
+        if b {
+            byte |= 1;
+        }
+    }
+    Ok(byte)
+}
 
 fn write_header(
     writer: &mut Writer<impl Write>,
@@ -22,19 +60,62 @@ fn write_header(
 
 fn write_symbol(
     writer: &mut Writer<impl Write>,
-    sym: &huffman::Symbol
+    sym: &huffman::Symbol,
 ) -> Result<(), std::io::Error> {
     writer.write_bits(sym.data.as_slice())?;
     Ok(())
 }
 
-fn write_byte(
-    writer: &mut Writer<impl Write>,
-    byte: u8
-) -> Result<(), std::io::Error> {
+fn write_byte(writer: &mut Writer<impl Write>, byte: u8) -> Result<(), std::io::Error> {
     let bits: Vec<bool> = (0..8).map(|i| (byte << i) & 128 != 0).collect();
     writer.write_bits(bits.as_slice())?;
     Ok(())
+}
+
+fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
+    let mut hash_map = HashMap::new();
+    for (c, sym) in header {
+        hash_map.insert(
+            sym.data
+                .iter()
+                .map(|d| {
+                    if *d {
+                        return "1".to_string();
+                    }
+                    "0".to_string()
+                })
+                .collect::<String>(),
+            c,
+        );
+    }
+    hash_map
+}
+
+fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
+    let file = File::open(file_path)?;
+    let mut bit_reader = Reader::new(file);
+    let header = read_header(&mut bit_reader)?;
+
+    let mut stdout = std::io::stdout();
+    let mut sym = String::new();
+    let hash_map = build_sym_hashmap(header);
+    loop {
+        eprintln!("{}",sym);
+        let bit = false;
+        if let 0 = bit_reader.read_bits(&mut [bit])? {
+            if sym.is_empty() {
+                stdout.flush()?;
+                return Ok(())
+            }
+            return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+        }
+        sym.push(if bit { '1' } else { '0' });
+
+        if let Some(&char) = hash_map.get(&sym) {
+            stdout.write(&[char as u8])?;
+            sym.clear();
+        }
+    }
 }
 
 fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
@@ -69,19 +150,28 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
             break;
         }
         let char = bytes[0] as char;
-        
+
         let sym_id = sym_table.binary_search_by_key(&char, |(c, _)| *c).unwrap();
-        let (_ , sym) = &sym_table[sym_id];
+        let (_, sym) = &sym_table[sym_id];
         write_symbol(&mut writer, sym)?;
     }
 
     writer.flush()
 }
-    
 
 fn main() {
     let mut args = std::env::args().skip(1);
-    let file_path = args.next().unwrap();
+    let file_path = args.last().unwrap();
+    let mut args = std::env::args().skip(1);
+    if args.any(|a|{a == "-c"}) {
+        compress_file(file_path.as_str()).unwrap();
+        return;
+    }
+    let mut args = std::env::args().skip(1);
+    if args.any(|a|{a == "-d"}) {
+        decompress_file(file_path.as_str()).unwrap();
+        return;
+    }
 
-    compress_file(file_path.as_str()).unwrap()
+    eprintln!("Wrong args");
 }

@@ -46,7 +46,7 @@ pub mod huffman {
         }
     }
 
-    #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq)]
+    #[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
     pub struct Symbol {
         pub data: Vec<bool>,
     }
@@ -55,6 +55,10 @@ pub mod huffman {
         fn new() -> Symbol {
             Symbol { data: vec![] }
         }
+
+        pub fn from(vec: Vec<bool>) -> Symbol {
+            Symbol { data: vec }
+        }   
 
         fn append(&self, unit: bool) -> Symbol {
             Symbol {

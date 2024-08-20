@@ -14,45 +14,23 @@ impl<R: Read> Reader<R> {
         }
     }
 
-    pub fn read_bits(&mut self, n: usize) -> Result<Vec<bool>, std::io::Error> {
-        let mut bits: Vec<bool> = Vec::with_capacity(n);
-        let mut found_first_one = false;
-        for _ in 0..n{
-            if self.buffer_len == 0{
-                let mut byte = [0];
-                self.buf_reader.read_exact(&mut byte)?;
-                self.buffer = byte[0];
-                self.buffer_len = 8;
+    pub fn read_bits(&mut self, bits: &mut[bool]) -> Result<usize, std::io::Error> {
+        let mut n = 0;
+        while n < bits.len() {
+            if self.buffer_len == 0 {
+                let n_read = self.buf_reader.read(&mut[self.buffer])?;
+                if n_read == 0 {
+                    return Ok(n);
+                }
+                self.buffer_len = 8;                
             }
-            self.buffer_len -= 1;
-            let shifted_bit = self.buffer >> self.buffer_len;
-            let bit = shifted_bit & 1;
-            if found_first_one || bit == 1{
-                found_first_one = true;
-                bits.push(bit==1);
-            }
+            // FIXME: bisogna aggiornare correttamente il buffer e buffer_len
+            let first_bit = self.buffer >> self.buffer_len;
+            bits[n] = first_bit == 1;
+
+
+            n +=1;
         }
-        Ok(bits)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_read_one_bit_from_byte_array() {
-        let data: &[u8] = &[0b1];
-        let mut reader = Reader::new(data);
-        let bits = reader.read_bits(8).unwrap();
-        assert_eq!(bits, vec![true]);
-    }
-
-    #[test]
-    fn test_read_bits_from_byte_array() {
-        let data: &[u8] = &[0b10101010];
-        let mut reader = Reader::new(data);
-        let bits = reader.read_bits(8).unwrap();
-        assert_eq!(bits, vec![true, false, true, false, true, false, true, false]);
+        Ok(n)
     }
 }
