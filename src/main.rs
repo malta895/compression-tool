@@ -110,11 +110,20 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
     let mut bit_reader = Reader::new(file);
     let header = read_header(&mut bit_reader)?;
 
+    let mut symbols_count = 0u64;
+    for _ in 0..8 {
+        let byte = read_byte(&mut bit_reader)?;
+        symbols_count >>= 8;
+        symbols_count |= (byte as u64) << (8 * 7);
+    }
+    dbg!(symbols_count);
+
     let mut stdout = std::io::stdout();
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
     dbg!(&hash_map);
-    loop {
+    let mut read_symbols_count = 0;
+    while read_symbols_count < symbols_count {
         let mut bits = [false];
         if let 0 = bit_reader.read_bits(&mut bits).unwrap_or(0) {
             if sym.is_empty() {
@@ -133,8 +142,11 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
         if let Some(&char) = hash_map.get(&sym) {
             stdout.write(&[char as u8])?;
             sym.clear();
+            read_symbols_count += 1;
         }
     }
+
+    Ok(())
 }
 
 fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
@@ -162,6 +174,17 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
     let mut writer = Writer::new(std::io::stdout());
 
     write_header(&mut writer, &sym_table)?;
+
+    let symbols_count: u64 = freq_map.iter().map(|(_, freq)| freq).sum();
+    let mut symbols_count_bytes = [0u8; 8];
+    for i in 0..8 {
+        symbols_count_bytes[i] = (symbols_count >> i*8) as u8;
+    }
+    for byte in symbols_count_bytes {
+        write_byte(&mut writer, byte)?;
+    }
+    dbg!(symbols_count);
+
     loop {
         let mut bytes = [0; 1];
         let n = reader.read(&mut bytes)?;
