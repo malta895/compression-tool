@@ -6,8 +6,8 @@ use compression::huffman::Symbol;
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
 
-use std::io::{BufReader, Bytes, Read, Write};
-use std::process::{exit, ExitCode};
+use std::io::{BufReader, Read, Write};
+use std::process::exit;
 use std::{collections::HashMap, fs::File};
 
 fn read_header(
@@ -45,12 +45,12 @@ fn read_byte(reader: &mut Reader<impl Read>) -> Result<u8, std::io::Error> {
         ));
     }
     let mut byte = 0u8;
+    // b starts from the most significant bit
     for b in bits {
-        byte >>= 1;
-        
+        byte <<= 1;
         if b {
-            // write most significant bit
-            byte |= 128;
+            // write least significant bit
+            byte |= 1;
         }
     }
     dbg!((bits, byte));
@@ -115,9 +115,8 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
     let hash_map = build_sym_hashmap(header);
     dbg!(&hash_map);
     loop {
-        dbg!(&sym);
-        let bit = false;
-        if let 0 = bit_reader.read_bits(&mut [bit]).unwrap_or(0) {
+        let mut bits = [false];
+        if let 0 = bit_reader.read_bits(&mut bits).unwrap_or(0) {
             if sym.is_empty() {
                 stdout.flush()?;
                 return Ok(())
@@ -128,8 +127,9 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
             ));
             
         }
-        sym.push(if bit { '1' } else { '0' });
-
+        sym.push(if bits[0] { '1' } else { '0' });
+        dbg!(&sym);
+        
         if let Some(&char) = hash_map.get(&sym) {
             stdout.write(&[char as u8])?;
             sym.clear();
@@ -179,7 +179,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
 }
 
 fn main() {
-    let mut args = std::env::args().skip(1);
+    let args = std::env::args().skip(1);
     let file_path = args.last().unwrap();
     let mut args = std::env::args().skip(1);
     if args.any(|a|{a == "-c"}) {

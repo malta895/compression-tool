@@ -30,17 +30,18 @@ impl<R: Read> Reader<R> {
             self.buffer_len += 8;
         }
 
-        let bit = self.buffer & 1 == 1;
+        let bit = self.buffer & 128 == 128;
 
         self.buffer_len -= 1;
-        self.buffer >>= 1;
+        self.buffer <<= 1;
 
         Ok(bit)
     }
 
     pub fn read_bits(&mut self, bits: &mut [bool]) -> Result<usize, std::io::Error> {
         let mut n = 0;
-        for idx in (0..bits.len()) {
+        bits.reverse();
+        for idx in 0..bits.len() {
             let bit = self.read_bit()?;
             dbg!(bit);
             bits[idx] = bit;
