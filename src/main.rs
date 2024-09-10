@@ -6,8 +6,8 @@ use compression::huffman::Symbol;
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
 
-use std::collections::hash_map;
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, Bytes, Read, Write};
+use std::process::{exit, ExitCode};
 use std::{collections::HashMap, fs::File};
 
 fn read_header(
@@ -15,13 +15,19 @@ fn read_header(
 ) -> Result<Vec<(char, huffman::Symbol)>, std::io::Error> {
     let entries_cnt = read_byte(reader)?;
     let mut res: Vec<(char, Symbol)> = vec![];
+    dbg!(entries_cnt);
     for _ in 0..entries_cnt {
         let char = read_byte(reader)? as char;
         let sym_len = read_byte(reader)? as usize;
         let mut sym_data: Vec<bool> = vec![false; sym_len];
+        dbg!(sym_len);
+        // FIXME: bug
         let n = reader.read_bits(&mut sym_data)?;
         if n != sym_len {
-            return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Read bits are different from symbol length"
+            ));
         }
         res.push((char, Symbol::from(sym_data)))
     }
@@ -33,15 +39,21 @@ fn read_byte(reader: &mut Reader<impl Read>) -> Result<u8, std::io::Error> {
     let mut bits = [false; 8];
     let n = reader.read_bits(&mut bits)?;
     if n < 8 {
-        return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::Interrupted,
+            "Found malformed byte (n bits < 8)",
+        ));
     }
     let mut byte = 0u8;
     for b in bits {
-        byte <<= 1;
+        byte >>= 1;
+        
         if b {
-            byte |= 1;
+            // write most significant bit
+            byte |= 128;
         }
     }
+    dbg!((bits, byte));
     Ok(byte)
 }
 
@@ -54,6 +66,7 @@ fn write_header(
         write_byte(writer, *ch as u8)?;
         write_byte(writer, sym.data.len() as u8)?;
         write_symbol(writer, &sym)?;
+        dbg!(sym_table, sym);
     }
     Ok(())
 }
@@ -74,6 +87,7 @@ fn write_byte(writer: &mut Writer<impl Write>, byte: u8) -> Result<(), std::io::
 
 fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     let mut hash_map = HashMap::new();
+    dbg!(&header);
     for (c, sym) in header {
         hash_map.insert(
             sym.data
@@ -99,15 +113,20 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
     let mut stdout = std::io::stdout();
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
+    dbg!(&hash_map);
     loop {
-        eprintln!("{}",sym);
+        dbg!(&sym);
         let bit = false;
-        if let 0 = bit_reader.read_bits(&mut [bit])? {
+        if let 0 = bit_reader.read_bits(&mut [bit]).unwrap_or(0) {
             if sym.is_empty() {
                 stdout.flush()?;
                 return Ok(())
             }
-            return Err(std::io::Error::from(std::io::ErrorKind::Interrupted));
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Interrupted,
+                "Could not read empty symbol",
+            ));
+            
         }
         sym.push(if bit { '1' } else { '0' });
 
@@ -169,7 +188,10 @@ fn main() {
     }
     let mut args = std::env::args().skip(1);
     if args.any(|a|{a == "-d"}) {
-        decompress_file(file_path.as_str()).unwrap();
+        if let Err(err) = decompress_file(file_path.as_str()){
+            eprintln!("Error decompressing: {}", err);
+            exit(1);
+        }
         return;
     }
 
