@@ -15,12 +15,12 @@ fn read_header(
 ) -> Result<Vec<(char, huffman::Symbol)>, std::io::Error> {
     let entries_cnt = read_byte(reader)?;
     let mut res: Vec<(char, Symbol)> = vec![];
-    dbg!(entries_cnt);
+    // dbg!(entries_cnt);
     for _ in 0..entries_cnt {
         let char = read_byte(reader)? as char;
         let sym_len = read_byte(reader)? as usize;
         let mut sym_data: Vec<bool> = vec![false; sym_len];
-        dbg!(sym_len);
+        // dbg!(sym_len);
         // FIXME: bug
         let n = reader.read_bits(&mut sym_data)?;
         if n != sym_len {
@@ -53,7 +53,7 @@ fn read_byte(reader: &mut Reader<impl Read>) -> Result<u8, std::io::Error> {
             byte |= 1;
         }
     }
-    dbg!((bits, byte));
+    // dbg!((bits, byte));
     Ok(byte)
 }
 
@@ -66,7 +66,7 @@ fn write_header(
         write_byte(writer, *ch as u8)?;
         write_byte(writer, sym.data.len() as u8)?;
         write_symbol(writer, &sym)?;
-        dbg!(sym_table, sym);
+        // dbg!(sym_table, sym);
     }
     Ok(())
 }
@@ -87,7 +87,7 @@ fn write_byte(writer: &mut Writer<impl Write>, byte: u8) -> Result<(), std::io::
 
 fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     let mut hash_map = HashMap::new();
-    dbg!(&header);
+    // dbg!(&header);
     for (c, sym) in header {
         hash_map.insert(
             sym.data
@@ -110,20 +110,20 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
     let mut bit_reader = Reader::new(file);
     let header = read_header(&mut bit_reader)?;
 
-    let mut symbols_count = 0u64;
+    let mut total_symbols_count = 0u64;
     for _ in 0..8 {
         let byte = read_byte(&mut bit_reader)?;
-        symbols_count >>= 8;
-        symbols_count |= (byte as u64) << (8 * 7);
+        total_symbols_count >>= 8;
+        total_symbols_count |= (byte as u64) << (8 * 7);
     }
-    dbg!(symbols_count);
+    // dbg!(total_symbols_count);
 
     let mut stdout = std::io::stdout();
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
-    dbg!(&hash_map);
+    // dbg!(&hash_map);
     let mut read_symbols_count = 0;
-    while read_symbols_count < symbols_count {
+    while read_symbols_count < total_symbols_count {
         let mut bits = [false];
         if let 0 = bit_reader.read_bits(&mut bits).unwrap_or(0) {
             if sym.is_empty() {
@@ -137,7 +137,7 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
             
         }
         sym.push(if bits[0] { '1' } else { '0' });
-        dbg!(&sym);
+        // dbg!(&sym);
         
         if let Some(&char) = hash_map.get(&sym) {
             stdout.write(&[char as u8])?;
@@ -183,7 +183,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
     for byte in symbols_count_bytes {
         write_byte(&mut writer, byte)?;
     }
-    dbg!(symbols_count);
+    // dbg!(symbols_count);
 
     loop {
         let mut bytes = [0; 1];
