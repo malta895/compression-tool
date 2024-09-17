@@ -2,5 +2,7 @@
 name = "compression-tool"
 version = "0.1.0"
 edition = "2021"
+description = "The fastest and most efficient Compression Tool - Free if you can click a button"
 
 [dependencies]
+clap = { version = "4.5.17", features = ["derive"] }

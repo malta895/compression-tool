@@ -1,12 +1,15 @@
+mod args;
 mod compression;
 mod io;
+use args::Args;
 
+use clap::Parser;
 use compression::huffman::Symbol;
 
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
 
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::process::exit;
 use std::{collections::HashMap, fs::File};
 
@@ -26,7 +29,7 @@ fn read_header(
         if n != sym_len {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
-                "Read bits are different from symbol length"
+                "Read bits are different from symbol length",
             ));
         }
         res.push((char, Symbol::from(sym_data)))
@@ -105,8 +108,8 @@ fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     hash_map
 }
 
-fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
-    let file = File::open(file_path)?;
+fn decompress_file(input_file_path: &str, output_file_path: Option<String>) -> Result<(), std::io::Error> {
+    let file = File::open(input_file_path)?;
     let mut bit_reader = Reader::new(file);
     let header = read_header(&mut bit_reader)?;
 
@@ -118,7 +121,12 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
     }
     // dbg!(total_symbols_count);
 
-    let mut stdout = std::io::stdout();
+    let mut output_stream: Box<dyn Write> = if let Some(output_file_path) = output_file_path {
+        let file = File::create(output_file_path)?;
+        Box::new(BufWriter::new(file))
+    } else {
+        Box::new(std::io::stdout())
+    };
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
     // dbg!(&hash_map);
@@ -127,20 +135,19 @@ fn decompress_file(file_path: &str) -> Result<(), std::io::Error> {
         let mut bits = [false];
         if let 0 = bit_reader.read_bits(&mut bits).unwrap_or(0) {
             if sym.is_empty() {
-                stdout.flush()?;
-                return Ok(())
+                output_stream.flush()?;
+                return Ok(());
             }
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Interrupted,
                 "Could not read empty symbol",
             ));
-            
         }
         sym.push(if bits[0] { '1' } else { '0' });
         // dbg!(&sym);
-        
+
         if let Some(&char) = hash_map.get(&sym) {
-            stdout.write(&[char as u8])?;
+            output_stream.write(&[char as u8])?;
             sym.clear();
             read_symbols_count += 1;
         }
@@ -178,7 +185,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
     let symbols_count: u64 = freq_map.iter().map(|(_, freq)| freq).sum();
     let mut symbols_count_bytes = [0u8; 8];
     for i in 0..8 {
-        symbols_count_bytes[i] = (symbols_count >> i*8) as u8;
+        symbols_count_bytes[i] = (symbols_count >> i * 8) as u8;
     }
     for byte in symbols_count_bytes {
         write_byte(&mut writer, byte)?;
@@ -202,21 +209,16 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
 }
 
 fn main() {
-    let args = std::env::args().skip(1);
-    let file_path = args.last().unwrap();
-    let mut args = std::env::args().skip(1);
-    if args.any(|a|{a == "-c"}) {
-        compress_file(file_path.as_str()).unwrap();
-        return;
-    }
-    let mut args = std::env::args().skip(1);
-    if args.any(|a|{a == "-d"}) {
-        if let Err(err) = decompress_file(file_path.as_str()){
-            eprintln!("Error decompressing: {}", err);
-            exit(1);
-        }
-        return;
-    }
+    let args = Args::parse().validate().expect("Argument validation error");
+    dbg!(&args);
 
-    eprintln!("Wrong args");
+    let input_file_name = args.input;
+    if args.compress {
+        compress_file(&input_file_name.as_str())
+            .expect(format!("Error compressing file {}", input_file_name).as_str());
+    }
+    if args.decompress {
+        decompress_file(&input_file_name.as_str(), args.output)
+            .expect(format!("Error decompressing file {}", input_file_name).as_str());
+    }
 }
