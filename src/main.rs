@@ -5,6 +5,7 @@ use args::Args;
 
 use clap::Parser;
 use compression::huffman::Symbol;
+use io::output;
 
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
@@ -108,7 +109,10 @@ fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     hash_map
 }
 
-fn decompress_file(input_file_path: &str, output_file_path: Option<String>) -> Result<(), std::io::Error> {
+fn decompress_file(
+    input_file_path: &str,
+    output_file_path: Option<String>,
+) -> Result<(), std::io::Error> {
     let file = File::open(input_file_path)?;
     let mut bit_reader = Reader::new(file);
     let header = read_header(&mut bit_reader)?;
@@ -156,8 +160,11 @@ fn decompress_file(input_file_path: &str, output_file_path: Option<String>) -> R
     Ok(())
 }
 
-fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
-    let file = File::open(file_path)?;
+fn compress_file(
+    input_file_path: &str,
+    output_file_path: Option<String>,
+) -> Result<(), std::io::Error> {
+    let file = File::open(input_file_path)?;
     let mut reader = BufReader::new(file);
     let mut freq_map: HashMap<char, u64> = HashMap::new();
 
@@ -175,12 +182,18 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
     let mut sym_table = huffman::encode(&freq_map);
     sym_table.sort_unstable_by_key(|(c, _)| *c);
 
-    let file = File::open(file_path)?;
+    let file = File::open(input_file_path)?;
     let mut reader = BufReader::new(file);
 
-    let mut writer = Writer::new(std::io::stdout());
+    let file_writer: Box<dyn Write> = if let Some(output_file_path) = output_file_path {
+        let file = File::create(output_file_path)?;
+        Box::new(file)
+    } else {
+        Box::new(std::io::stdout())
+    };
 
-    write_header(&mut writer, &sym_table)?;
+    let mut bit_writer = Writer::new(file_writer);
+    write_header(&mut bit_writer, &sym_table)?;
 
     let symbols_count: u64 = freq_map.iter().map(|(_, freq)| freq).sum();
     let mut symbols_count_bytes = [0u8; 8];
@@ -188,7 +201,7 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
         symbols_count_bytes[i] = (symbols_count >> i * 8) as u8;
     }
     for byte in symbols_count_bytes {
-        write_byte(&mut writer, byte)?;
+        write_byte(&mut bit_writer, byte)?;
     }
     // dbg!(symbols_count);
 
@@ -202,10 +215,10 @@ fn compress_file(file_path: &str) -> Result<(), std::io::Error> {
 
         let sym_id = sym_table.binary_search_by_key(&char, |(c, _)| *c).unwrap();
         let (_, sym) = &sym_table[sym_id];
-        write_symbol(&mut writer, sym)?;
+        write_symbol(&mut bit_writer, sym)?;
     }
 
-    writer.flush()
+    bit_writer.flush()
 }
 
 fn main() {
@@ -213,12 +226,14 @@ fn main() {
     dbg!(&args);
 
     let input_file_name = args.input;
+    let output_file_name = args.output;
     if args.compress {
-        compress_file(&input_file_name.as_str())
+        compress_file(&input_file_name.as_str(), output_file_name)
             .expect(format!("Error compressing file {}", input_file_name).as_str());
+        return
     }
     if args.decompress {
-        decompress_file(&input_file_name.as_str(), args.output)
+        decompress_file(&input_file_name.as_str(), output_file_name)
             .expect(format!("Error decompressing file {}", input_file_name).as_str());
     }
 }
