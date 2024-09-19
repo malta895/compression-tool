@@ -1,4 +1,4 @@
-use compression::huffman::Symbol;
+use crate::compression::huffman::Symbol;
 
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
