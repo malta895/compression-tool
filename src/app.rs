@@ -3,8 +3,8 @@ use crate::compression::huffman::Symbol;
 use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
 
-use std::io::{BufReader, BufWriter, Read, Write};
-use std::{collections::HashMap, fs::File};
+use std::collections::HashMap;
+use std::io::{BufReader, Read, Seek, Write};
 
 fn read_header(
     reader: &mut Reader<impl Read>,
@@ -101,12 +101,11 @@ fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     hash_map
 }
 
-pub fn decompress_file(
-    input_file_path: &str,
-    output_file_path: Option<String>,
+pub fn decompress_block(
+    input_stream: &mut impl Read,
+    output_stream: &mut impl Write,
 ) -> Result<(), std::io::Error> {
-    let file = File::open(input_file_path)?;
-    let mut bit_reader = Reader::new(file);
+    let mut bit_reader = Reader::new(input_stream);
     let header = read_header(&mut bit_reader)?;
 
     let mut total_symbols_count = 0u64;
@@ -117,12 +116,6 @@ pub fn decompress_file(
     }
     // dbg!(total_symbols_count);
 
-    let mut output_stream: Box<dyn Write> = if let Some(output_file_path) = output_file_path {
-        let file = File::create(output_file_path)?;
-        Box::new(BufWriter::new(file))
-    } else {
-        Box::new(std::io::stdout())
-    };
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
     // dbg!(&hash_map);
@@ -152,12 +145,11 @@ pub fn decompress_file(
     Ok(())
 }
 
-pub fn compress_file(
-    input_file_path: &str,
-    output_file_path: Option<String>,
+pub fn compress_block<InnerStream: Write>(
+    input_stream: impl Read + Seek,
+    mut output_stream: &mut Writer<&mut InnerStream>,
 ) -> Result<(), std::io::Error> {
-    let file = File::open(input_file_path)?;
-    let mut reader = BufReader::new(file);
+    let mut reader = BufReader::new(input_stream);
     let mut freq_map: HashMap<char, u64> = HashMap::new();
 
     loop {
@@ -174,18 +166,9 @@ pub fn compress_file(
     let mut sym_table = huffman::encode(&freq_map);
     sym_table.sort_unstable_by_key(|(c, _)| *c);
 
-    let file = File::open(input_file_path)?;
-    let mut reader = BufReader::new(file);
+    reader.rewind()?;
 
-    let file_writer: Box<dyn Write> = if let Some(output_file_path) = output_file_path {
-        let file = File::create(output_file_path)?;
-        Box::new(file)
-    } else {
-        Box::new(std::io::stdout())
-    };
-
-    let mut bit_writer = Writer::new(file_writer);
-    write_header(&mut bit_writer, &sym_table)?;
+    write_header(&mut output_stream, &sym_table)?;
 
     let symbols_count: u64 = freq_map.iter().map(|(_, freq)| freq).sum();
     let mut symbols_count_bytes = [0u8; 8];
@@ -193,7 +176,7 @@ pub fn compress_file(
         symbols_count_bytes[i] = (symbols_count >> i * 8) as u8;
     }
     for byte in symbols_count_bytes {
-        write_byte(&mut bit_writer, byte)?;
+        write_byte(&mut output_stream, byte)?;
     }
     // dbg!(symbols_count);
 
@@ -207,8 +190,8 @@ pub fn compress_file(
 
         let sym_id = sym_table.binary_search_by_key(&char, |(c, _)| *c).unwrap();
         let (_, sym) = &sym_table[sym_id];
-        write_symbol(&mut bit_writer, sym)?;
+        write_symbol(&mut output_stream, sym)?;
     }
 
-    bit_writer.flush()
+    Ok(())
 }
