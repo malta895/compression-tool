@@ -121,6 +121,14 @@ pub fn decompress_block<R: Read>(
     }
     // dbg!(total_symbols_count);
 
+    if header.len() == 1 {
+        let (ch, _) = header.first().unwrap();
+        let buffer = vec![*ch as u8; total_symbols_count as usize];
+        output_stream.write(&buffer)?;
+        output_stream.flush()?;
+        return Ok(total_symbols_count);
+    }
+
     let mut sym = String::new();
     let hash_map = build_sym_hashmap(header);
     // dbg!(&hash_map);
@@ -215,6 +223,27 @@ mod tests {
     #[test]
     fn should_compress_and_decompress_one_block() {
         let block_to_compress = "ciao".as_bytes();
+        let mut compressed_stream = [0u8; 1024];
+        let mut bit_writer = crate::io::output::Writer::new(&mut compressed_stream[..]);
+
+        compress_block(Cursor::new(block_to_compress), &mut bit_writer)
+            .expect("compress should not throw error");
+
+        let mut decompressed_stream = [0u8; 1024];
+
+        let mut reader_to_decompress = Reader::new(&compressed_stream[..]);
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+            .expect("decompress should not throw error");
+
+        assert_eq!(
+            block_to_compress[..],
+            decompressed_stream[..block_to_compress.len()]
+        );
+    }
+
+    #[test]
+    fn should_compress_and_decompress_one_block_of_one_byte() {
+        let block_to_compress = "c".as_bytes();
         let mut compressed_stream = [0u8; 1024];
         let mut bit_writer = crate::io::output::Writer::new(&mut compressed_stream[..]);
 
