@@ -10,6 +10,7 @@ use std::{
 
 use args::Args;
 use clap::Parser;
+use io::input::Reader;
 
 fn main() {
     let args = Args::parse().validate().expect("Argument validation error");
@@ -55,8 +56,9 @@ fn main() {
     }
 
     if args.decompress {
+        let mut input_reader = Reader::new(input_stream);
         loop {
-            match app::decompress_block(&mut input_stream, &mut output_stream) {
+            match app::decompress_block(&mut input_reader, &mut output_stream) {
                 Ok(()) => (),
                 Err(err) if err.kind() == std::io::ErrorKind::Interrupted => return,
                 Err(err) => panic!("Error decompressing block: {}", err),

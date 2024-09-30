@@ -101,16 +101,15 @@ fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
     hash_map
 }
 
-pub fn decompress_block(
-    input_stream: &mut impl Read,
-    output_stream: &mut impl Write,
+pub fn decompress_block<R: Read>(
+    mut input_reader: &mut Reader<R>,
+    mut output_stream: impl Write,
 ) -> Result<(), std::io::Error> {
-    let mut bit_reader = Reader::new(input_stream);
-    let header = read_header(&mut bit_reader)?;
+    let header = read_header(&mut input_reader)?;
 
     let mut total_symbols_count = 0u64;
     for _ in 0..8 {
-        let byte = read_byte(&mut bit_reader)?;
+        let byte = read_byte(&mut input_reader)?;
         total_symbols_count >>= 8;
         total_symbols_count |= (byte as u64) << (8 * 7);
     }
@@ -122,7 +121,7 @@ pub fn decompress_block(
     let mut read_symbols_count = 0;
     while read_symbols_count < total_symbols_count {
         let mut bits = [false];
-        if let 0 = bit_reader.read_bits(&mut bits).unwrap_or(0) {
+        if let 0 = input_reader.read_bits(&mut bits).unwrap_or(0) {
             if sym.is_empty() {
                 output_stream.flush()?;
                 return Ok(());
@@ -147,7 +146,7 @@ pub fn decompress_block(
 
 pub fn compress_block<InnerStream: Write>(
     input_stream: impl Read + Seek,
-    mut output_stream: &mut Writer<&mut InnerStream>,
+    mut output_stream: &mut Writer<InnerStream>,
 ) -> Result<(), std::io::Error> {
     let mut reader = BufReader::new(input_stream);
     let mut freq_map: HashMap<char, u64> = HashMap::new();
@@ -194,4 +193,67 @@ pub fn compress_block<InnerStream: Write>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Cursor;
+
+    use crate::io::input::Reader;
+
+    use super::{compress_block, decompress_block};
+
+    #[test]
+    fn should_compress_and_decompress_one_block() {
+        let block_to_compress = "ciao".as_bytes();
+        let mut compressed_stream = [0u8; 1024];
+        let mut bit_writer = crate::io::output::Writer::new(&mut compressed_stream[..]);
+
+        compress_block(Cursor::new(block_to_compress), &mut bit_writer)
+            .expect("compress should not throw error");
+
+        let mut decompressed_stream = [0u8; 1024];
+
+        let mut reader_to_decompress = Reader::new(&compressed_stream[..]);
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+            .expect("decompress should not throw error");
+
+        assert_eq!(
+            block_to_compress[..],
+            decompressed_stream[..block_to_compress.len()]
+        );
+    }
+
+    #[test]
+    fn should_compress_and_decompress_two_blocks() {
+        let first_block_to_compress = "ciao".as_bytes();
+        let second_block_to_compress = "mondo".as_bytes();
+        let mut compressed_stream = [0u8; 1024];
+        let mut bit_writer = crate::io::output::Writer::new(&mut compressed_stream[..]);
+
+        compress_block(Cursor::new(first_block_to_compress), &mut bit_writer)
+            .expect("compress should not throw error");
+        compress_block(Cursor::new(second_block_to_compress), &mut bit_writer)
+            .expect("compress should not throw error");
+
+        let mut decompressed_stream = [0u8; 1024];
+
+        let mut reader_to_decompress = Reader::new(&compressed_stream[..]);
+
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+            .expect("decompress should not throw error");
+
+        assert_eq!(
+            first_block_to_compress[..],
+            decompressed_stream[..4]
+        );
+
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+            .expect("decompress should not throw error");
+
+        assert_eq!(
+            second_block_to_compress[..],
+            decompressed_stream[4..9]
+        );
+    }
 }
