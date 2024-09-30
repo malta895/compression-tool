@@ -5,7 +5,7 @@ mod io;
 
 use std::{
     fs::File,
-    io::{Cursor, Read, Write},
+    io::{BufWriter, Cursor, Read, Write},
 };
 
 use args::Args;
@@ -14,7 +14,7 @@ use io::input::Reader;
 
 fn main() {
     let args = Args::parse().validate().expect("Argument validation error");
-    dbg!(&args);
+    // dbg!(&args);
 
     let mut input_stream: Box<dyn Read> = if let Some(input_file) = args.input {
         Box::new(File::open(input_file).expect("Error opening input file"))
@@ -38,6 +38,7 @@ fn main() {
                 .expect("Error reading from stdin");
 
             if n == 0 {
+                // dbg!("[compress] flushing...");
                 bit_writer.flush().expect("Error flushing bit writer");
                 return;
             }
@@ -57,10 +58,14 @@ fn main() {
 
     if args.decompress {
         let mut input_reader = Reader::new(input_stream);
+        let mut output_stream_buf = BufWriter::new(output_stream);
         loop {
-            match app::decompress_block(&mut input_reader, &mut output_stream) {
-                Ok(()) => (),
-                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => return,
+            match app::decompress_block(&mut input_reader, &mut output_stream_buf) {
+                Ok(0) => return,
+                Ok(_) => {
+                    // dbg!("[decompress] flushing...");
+                    output_stream_buf.flush().expect("Error flushing output stream");
+                },
                 Err(err) => panic!("Error decompressing block: {}", err),
             }
         }

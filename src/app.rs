@@ -4,6 +4,7 @@ use crate::compression::huffman;
 use crate::io::{input::Reader, output::Writer};
 
 use std::collections::HashMap;
+use std::error::Error;
 use std::io::{BufReader, Read, Seek, Write};
 
 fn read_header(
@@ -104,12 +105,17 @@ fn build_sym_hashmap(header: Vec<(char, Symbol)>) -> HashMap<String, char> {
 pub fn decompress_block<R: Read>(
     mut input_reader: &mut Reader<R>,
     mut output_stream: impl Write,
-) -> Result<(), std::io::Error> {
-    let header = read_header(&mut input_reader)?;
+) -> Result<u64, Box<dyn Error>> {
+    let header = match read_header(&mut input_reader) {
+        Ok(header) => header,
+        Err(e) if e.kind() == std::io::ErrorKind::Interrupted => return Ok(0),
+        Err(e) => return Err(e.into()),
+    };
 
     let mut total_symbols_count = 0u64;
     for _ in 0..8 {
-        let byte = read_byte(&mut input_reader)?;
+        let byte = read_byte(&mut input_reader)
+            .map_err(|e| format!("error reading symbol count: {}", e))?;
         total_symbols_count >>= 8;
         total_symbols_count |= (byte as u64) << (8 * 7);
     }
@@ -121,27 +127,30 @@ pub fn decompress_block<R: Read>(
     let mut read_symbols_count = 0;
     while read_symbols_count < total_symbols_count {
         let mut bits = [false];
-        if let 0 = input_reader.read_bits(&mut bits).unwrap_or(0) {
-            if sym.is_empty() {
-                output_stream.flush()?;
-                return Ok(());
-            }
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Interrupted,
-                "Could not read empty symbol",
-            ));
-        }
+        input_reader
+            .read_bits(&mut bits)
+            .map_err(|e| format!("error reading symbol bit: {}", e))?;
         sym.push(if bits[0] { '1' } else { '0' });
-        // dbg!(&sym);
-
-        if let Some(&char) = hash_map.get(&sym) {
-            output_stream.write(&[char as u8])?;
+        
+        if let Some(&ch) = hash_map.get(&sym) {
+            // dbg!(&sym, &ch);
+            output_stream.write(&[ch as u8])?;
+            output_stream.flush()?;
             sym.clear();
             read_symbols_count += 1;
+            // dbg!(&read_symbols_count);
         }
     }
 
-    Ok(())
+    if read_symbols_count < total_symbols_count {
+        return Err("not enough symbols read".into());
+    }
+
+    if sym.len() > 0 {
+        return Err("symbol buffer is not empty".into());
+    }
+
+    Ok(read_symbols_count)
 }
 
 pub fn compress_block<InnerStream: Write>(
@@ -236,24 +245,21 @@ mod tests {
         compress_block(Cursor::new(second_block_to_compress), &mut bit_writer)
             .expect("compress should not throw error");
 
-        let mut decompressed_stream = [0u8; 1024];
-
+        bit_writer.flush().expect("should flush bit writer");
         let mut reader_to_decompress = Reader::new(&compressed_stream[..]);
 
-        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+        let mut decompressed_stream = [0u8; 1024];
+
+        let mut decompressed_stream_cursor = Cursor::new(&mut decompressed_stream[..]);
+
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream_cursor)
             .expect("decompress should not throw error");
 
-        assert_eq!(
-            first_block_to_compress[..],
-            decompressed_stream[..4]
-        );
-
-        decompress_block(&mut reader_to_decompress, &mut decompressed_stream[..])
+        decompress_block(&mut reader_to_decompress, &mut decompressed_stream_cursor)
             .expect("decompress should not throw error");
 
-        assert_eq!(
-            second_block_to_compress[..],
-            decompressed_stream[4..9]
-        );
+        assert_eq!(first_block_to_compress[..], decompressed_stream[..4]);
+
+        assert_eq!(second_block_to_compress[..], decompressed_stream[4..9]);
     }
 }
