@@ -1,3 +1,5 @@
+#!/bin/bash
+
 TMP_DIR=$(mktemp -d)
 WINRAT_BIN="target/release/compression-tool"
 
